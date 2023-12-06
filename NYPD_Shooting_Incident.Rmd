@@ -1,0 +1,152 @@
+---
+title: "NYPD_Shooting_Incident"
+author: 
+date: "2023-11-08"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Source
+Here is the source of the data (NYPD Shotting Incident).
+
+https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD
+
+## Importing Data
+Here is the raw data before any changes or clean-up.
+Also, all the libraries that are needed for this file.
+```{r data importing, echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(lessR)
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+NYPD_Whole_Data <- read_csv(url_in)
+NYPD_Whole_Data
+```
+
+## Data Cleaning
+There are total 21 columns but I will select some columns that I am interested and
+organize them by factoring.
+```{r data cleaning, echo=TRUE}
+NYPD_My_Interest <- NYPD_Whole_Data %>%
+    select(INCIDENT_KEY, OCCUR_DATE, OCCUR_TIME, BORO, PRECINCT, STATISTICAL_MURDER_FLAG,
+           PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE) %>%
+    mutate(OCCUR_DATE = mdy(OCCUR_DATE),INCIDENT_KEY = as.factor(INCIDENT_KEY),
+            BORO = as.factor(BORO), PRECINCT = as.factor(PRECINCT), 
+            STATISTICAL_MURDER_FLAG = as.factor(STATISTICAL_MURDER_FLAG),
+            PERP_AGE_GROUP = as.factor(PERP_AGE_GROUP), PERP_SEX = as.factor(PERP_SEX),
+            PERP_RACE = as.factor(PERP_RACE), VIC_AGE_GROUP = as.factor(VIC_AGE_GROUP),
+            VIC_SEX = as.factor(VIC_SEX), VIC_RACE = as.factor(VIC_RACE))
+summary (NYPD_My_Interest)
+```
+
+## Visualization
+Let's see which borough has the highest and lowest shooting incident.
+```{r visualization, echo=TRUE}
+#Grouping the data by each borough before plotting a graph.
+Each_Boro <- NYPD_My_Interest %>% group_by(BORO) %>%
+  summarize(incidents = n())
+
+ggplot(Each_Boro, aes(x=BORO, y=incidents, fill=BORO)) +
+  geom_bar(stat="identity") +
+  xlab("Borough") + ylab("Incidents") +
+  ggtitle("Incidents in Different Boroughs") +
+  theme_minimal()
+```
+It looks like Brooklyn has the highest and Staten Island has the least incidents.
+
+
+
+Let's visualize the age group of victims.
+The reason why I did not choose to visualize any data related to perpetrator is because
+there are too many Null and Unknown.
+```{r table1, echo=TRUE}
+table(NYPD_My_Interest$PERP_AGE_GROUP)
+```
+```{r table2, echo=TRUE}
+table(NYPD_My_Interest$PERP_RACE)
+```
+```{r table3, echo=TRUE}
+table(NYPD_My_Interest$PERP_SEX)
+```
+
+
+
+Here is the table of victim's age group.
+```{r tables, echo=TRUE}
+table(NYPD_My_Interest$VIC_AGE_GROUP)
+```
+
+The 2nd column says "1022" which seems like a typo and it's just 1 person so I will 
+just include that to "UNKNOWN".
+```{r changes, echo=TRUE, warning=FALSE, message=FALSE}
+NYPD_My_Interest$VIC_AGE_GROUP <- replace(NYPD_My_Interest$VIC_AGE_GROUP, 
+                                          NYPD_My_Interest$VIC_AGE_GROUP == 1022, 'UNKNOWN')
+VIC_AGE <- NYPD_My_Interest %>%
+  select(VIC_AGE_GROUP) %>%
+  filter(VIC_AGE_GROUP != 'UNKNOWN')
+
+table(VIC_AGE)
+
+#1022 and UNKNOWN columns still exist so I would like to get rid of them.
+VIC_AGE$VIC_AGE_GROUP <- droplevels(VIC_AGE$VIC_AGE_GROUP)
+
+
+PieChart(VIC_AGE_GROUP, hole = 0, values = "%", data = VIC_AGE, 
+         main = "Age Groups of Victims", labels_cex = 1.0, quiet = TRUE)
+```
+The age group 25-44 has the most victim but 18-24 also has a lot of victims 
+in that age group. 
+
+
+## Data Model
+I would like to create a logistic regression model that shows the probability that
+murder case relates to some variables like perpetrator's age group, sex and race.
+```{r data model, echo=TRUE}
+glm.fit <- glm(STATISTICAL_MURDER_FLAG ~ PERP_RACE + PERP_SEX + PERP_AGE_GROUP, 
+               data = NYPD_My_Interest, family = binomial)
+summary(glm.fit)
+```
+By looking at Pr(>|z|), which is also called p-value, of each predictor variable,
+PER_RACEBLACK(0.0714) and PER_RACKBLACK HISPANIC(0.0336) are statistically significant
+for the prediction of if an shooting incident is murder or not. The significance level can 
+be determined by looking at the p-value. If the p-value is lower than 0.05 it is highly
+significant and if it is lower than 0.10, I would still consider that as significant.
+
+The p-values of PER_SEX are very low for both male and female, but comparing just those
+2 gender, the significance of p-value for male is far greater than female. This means
+if a perpetrator is a male, then it would be higher chance that the shooting incident is
+a murder than then when a perpetrator is a female. 
+
+In the Age group of perpetrator, there are some typos like "1020", "224", and "940" which
+are not really an age so those can be ignored. All of the age groups of perpetrator are
+very low, so there is not much analysis I can make here. 
+
+Using Null deviance and Residual deviance in the summary, I could calculate 
+X^2 statistic of the model, which is a difference between those deviance.
+Also, could calculate predictor value, which is the difference of
+degree of freedom of Nuill and Residual deviance.
+```{r calculation, echo=TRUE}
+X_statistic = 17889 - 16776
+degree_of_freedom = 17967-17950
+X_statistic
+degree_of_freedom
+```
+There is a Chi-Square to P-Value Calculator on-line.
+
+https://www.statology.org/chi-square-p-value-calculator/
+
+I put those number and got p-value of 0.000000. This is less than 0.05,
+so I would conclude that this logistic regression model is highly useful.
+
+
+## Bias
+My bias on perpetrators might have led me to create the logistic regression model to predict
+if particular perpetrators' race, age or sex relate to the murder cases. The bias is
+from my background that my family used to own a convenient store in one of the cities 
+with the highest crime rate. However, my bias did not affect any interpretation
+on the analysis. My bias may have led me to look into certain variables but all the
+analysis are based on the result from calculations and data modeling. 
