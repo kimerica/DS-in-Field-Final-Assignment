@@ -37,7 +37,7 @@ This project analyzes real-world shooting incident data reported by the NYPD. Us
 More analysis can be added such as:
 - Monthly/yearly trend over time
 - Crosstabs of age, race, borough
-- Map of incident locations using `leaflet` (optional)
+- Map of incident locations using `leaflet`
 
 ---
 
